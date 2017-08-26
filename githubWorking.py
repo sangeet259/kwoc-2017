@@ -1,0 +1,114 @@
+import json
+import os
+import requests
+f=open("members.txt","r")
+repos=[]
+openissues=0
+closedissues=0
+openprs=0
+closedprs=0
+itercount=0
+#os.system("git pull --rebase origin master")
+while (1):
+    name=f.readline()
+    if not name: break
+    name=name.strip()
+    url = "https://api.github.com/graphql"
+    headers = {"Authorization": "Basic "+str(os.environ['OUATH_KEY'])}
+
+    repo_cur=issue_cur=pr_cur="first: 100"
+    while (1):
+        query = json.dumps({"query": "query{user(login: \"" + name +
+                            "\") { repositories("+str(repo_cur)+"){edges{node{url isFork}} pageInfo{endCursor hasNextPage}} issues("+str(issue_cur)+")\
+                            {edges{node{state}} pageInfo {endCursor hasNextPage}} pullRequests("+str(pr_cur)+"){edges{node{state}} pageInfo \
+                            {endCursor hasNextPage}} }}"})
+        print("query",query)
+        #q='query{user(login: "americast"){name url}}'
+        r = requests.post(url, headers=headers, data=query)
+        #print "*****"+str(r.content)
+        data_dict = json.loads(str(r.content))
+        try:
+            next_repo=data_dict['data']['user']['repositories']['pageInfo']['endCursor']
+        except:
+            next_repo="errored"
+            try:
+                next_issue=data_dict['data']['user']['issues']['pageInfo']['endCursor']
+            except:
+                next_issue="errored"
+                try:
+                    next_pr=data_dict['data']['user']['pullRequests']['pageInfo']['endCursor']
+                except:
+                    next_pr="errored"
+
+                print ("data dict",data_dict)
+
+
+                if next_repo!="errored":
+                    for repo in data_dict['data']['user']['repositories']['edges']:
+                        if repo['node']['isFork']==False:
+                            repos.append(repo['node']['url'])
+                            if next_repo!=None and data_dict['data']['user']['repositories']['pageInfo']['hasNextPage']!=False:
+                                repo_cur='first:100 after:"'+str(next_repo)+'" '
+                            else:
+                                repo_cur='first: 0'
+
+                if next_issue!="errored":
+                    for issue in data_dict['data']['user']['issues']['edges']:
+                        if issue['node']['state']=='CLOSED':
+                            closedissues+=1
+                        else:
+                            openissues+=1
+                            if next_issue!=None and data_dict['data']['user']['issues']['pageInfo']['hasNextPage']!=False:
+                                issue_cur='first: 100 after:"'+str(next_issue)+'" '
+                            else:
+                                issue_cur='first: 0'
+
+                if next_pr!="errored":
+                    for pr in data_dict['data']['user']['pullRequests']['edges']:
+                        if pr['node']['state']=='MERGED':
+                            closedprs+=1
+                        elif pr['node']['state']=='OPEN':
+                            openprs+=1
+                            if next_pr!=None and data_dict['data']['user']['pullRequests']['pageInfo']['hasNextPage']!=False:
+                                pr_cur='first: 100 after:"'+str(next_pr)+'" '
+                            else:
+                                pr_cur='first: 0'
+
+                if (data_dict['data']['user']['repositories']['pageInfo']['hasNextPage']==False or next_repo==None) and (data_dict['data']['user']['issues']['pageInfo']['hasNextPage']==False or next_issue==None) and (data_dict['data']['user']['pullRequests']['pageInfo']\
+                                                                                                                                                                                                ['hasNextPage']==False or next_pr==None): break
+                itercount+=1
+                #break;
+
+repos=set(repos)
+print repos
+
+print "before comma: "
+print openissues
+print closedissues
+print openprs
+print closedprs
+
+def insertcomma(num):
+    length=len(num)
+    count=0
+    while(count<length):
+        if count==1:
+            count+=1; continue
+            if count%2==1:
+                num=num[:length-count]+','+num[length-count:]
+                count+=1
+                return num
+
+
+
+openissues = insertcomma(str(openissues))
+closedissues = insertcomma(str(closedissues))
+openprs = insertcomma(str(openprs))
+closedprs = insertcomma(str(closedprs))
+
+print "open issues: "+openissues
+print "closed issues: "+closedissues
+print "open prs: "+openprs
+print "closed prs: "+closedprs
+print "repeated: "+str(itercount)
+
